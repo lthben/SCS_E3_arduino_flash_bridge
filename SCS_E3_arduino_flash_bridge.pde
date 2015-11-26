@@ -117,7 +117,8 @@ void draw()
                         another_string_buffer = thisClient.readString();      
 
                         if (another_string_buffer != null) {
-                                int translated = translation_table(another_string_buffer);
+                                int translated = translation_table(another_string_buffer.trim());
+                                println(translated);
                                 serialPort.write( 48 + translated );
 //                                serialPort.write(another_string_buffer); //echo to serial port
                         }
@@ -146,26 +147,28 @@ void smooth_data() { //averaging filter
 int translation_table (String _string) {
 
         int translated = 0;
+        
+        println("string: " + _string);
 
-        if (_string.equals("off-all")) {
+        if (_string.equals("off_all")) {
                 translated = 0;
-        } else if (_string.equals("pulse-1")) {
+        } else if (_string.equals("pulse_1")) {
                 translated = 1;
-        } else if (_string.equals("pulse-2")) {
+        } else if (_string.equals("pulse_2")) {
                 translated = 2;
-        } else if (_string.equals("pulse-3")) {
+        } else if (_string.equals("pulse_3")) {
                 translated = 3;
-        } else if (_string.equals("wrong-1")) {
+        } else if (_string.equals("wrong_1")) {
                 translated = 4;
-        } else if (_string.equals("wrong-2")) {
+        } else if (_string.equals("wrong_2")) {
                 translated = 5;
-        } else if (_string.equals("wrong-3")) {
+        } else if (_string.equals("wrong_3")) {
                 translated = 6;
-        } else if (_string.equals("correct-1")) {
+        } else if (_string.equals("correct_1")) {
                 translated = 7;
-        } else if (_string.equals("correct-2")) {
+        } else if (_string.equals("correct_2")) {
                 translated = 8;
-        } else if (_string.equals("correct-3")) {
+        } else if (_string.equals("correct_3")) {
                 translated = 9;
         } 
         
