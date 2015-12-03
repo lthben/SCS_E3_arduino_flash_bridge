@@ -8,11 +8,21 @@
  as strings and text strings as text strings. Client should send all data 
  in the form of strings as well, including numbers. 
  
+ Reads a coded string from 3 Arduino Sparkfun RFID readers such as "r1a1", 
+ where r1 means 'reader 1' and a1 means 'audio 1'. There is r1 to r3, and 
+ then for the tags a1 to a3, v1 to v3, w1 to w3. This is will be sent to the 
+ server port to the client program.
+ 
+ The client program, e.g. Flash, will send a string to control the three neopixel 
+ strips depending on the RFID readouts. The string will be in the format such as "pulse_1" 
+ (waiting indication mode for reader 1), "wrong_3" (wrong light indication for reader 3) 
+ or "correct_2" (correct light indication for reader 2). 
+ 
  Translation function included for SCS E3. Used to control three NeoPixel
  strips. Translates commands from the socket to into a number to send to 
  the serial port for the Arduino.  
  
- Last updated: 26 Nov 2015
+ Last updated: 3 Dec 2015
  */
 
 import processing.net.*;
@@ -20,64 +30,82 @@ import processing.serial.*;
 
 //averaging the readings
 final int NUM_OF_READINGS = 5; //the higher the number, the smoother the transition, but more laggy
-int[] arrayReadings = new int[NUM_OF_READINGS];
-int averageSensorValue = 0;
-int totalValue = 0;
+int[] array_readings = new int[NUM_OF_READINGS];
+int average_sensor_value = 0;
+int total_value = 0;
 int my_index;
 
-// Define for setting file
-String[] lines;
-int a = 0;//index of comport
-int b = 1;//index of baud rate
-int c = 2;//index of server port
-int index = 0;
-
-// Define your Serial port from the Arduino IDE, tools - serialport
-String portname = "COM1";
-Serial serialPort;
-int BR = 9600;
-
-String buf="";
-int cr = 13;  // ASCII return   == 13 //
-int lf = 10;  // ASCII linefeed == 10 //
-
-// the Network stuff
-int port = 9001;
-Server myServer;
+//network parameters
+//String rfid1_portname, rfid2_portname, rfid3_portname, neopixel_portname;
+final int NUM_PORTS = 4;
+Serial[] my_ports;
+String[] portnames;
+//Serial rfid1_port, rfid2_port, rfid3_port, neopixel_port;
+Server my_server;
+int server_port_num;
+int baud_rate;
 
 //for incoming serial data
 String in_string;
 int charvalue;
-
-//ASCII code for sending
+String buf="";
+int cr = 13;  // ASCII return   == 13 //
+int lf = 10;  // ASCII linefeed == 10 //
 byte eol = 0;
 int NEWLINE = 10;
 byte nullByte = 0;
 
 void setup() {
-        size(400, 400);
+
+        size(600, 350);
+
         printArray(Serial.list());
 
-        lines = loadStrings("setting.txt");
-        if (index < lines.length) {
-                String[] comport = split(lines[a], '=');
-                portname = comport[1];
-                print("COMPORT=");
-                println(comport[1]);
-                String[] br = split(lines[b], '=');
-                BR = int(br[1]);
-                print("BR=");
-                println(br[1]);
-                String[] serverPort = split(lines[c], '=');
-                port = int(serverPort[1]);
-                print("SERVER PORT=");
-                println(serverPort[1]);
+        String[] lines = loadStrings("settings.txt");
+        portnames = new String[4];
+
+        for (int i=0; i<lines.length; i++) {
+
+                String[] a_line = split(lines[0], '=');
+                portnames[0] = a_line[1];
+
+                a_line = split(lines[1], '=');
+                portnames[1] = a_line[1];
+
+                a_line = split(lines[2], '=');
+                portnames[2] = a_line[1];
+
+
+                a_line = split(lines[3], '=');
+                portnames[3] = a_line[1];
+
+                a_line = split(lines[4], '=');
+                baud_rate = int(a_line[1]);
+
+                a_line = split(lines[5], '=');
+                server_port_num = int(a_line[1]);
         }    
 
+        my_server = new Server(this, server_port_num);
 
-        myServer = new Server(this, port);
-        serialPort = new Serial(this, portname, BR);
-        println("set up");
+        my_ports = new Serial[NUM_PORTS];
+
+        for (int i=0; i<NUM_PORTS; i++) {
+                my_ports[i] = new Serial(this, portnames[i], baud_rate);
+        }        
+
+        print("RFID PORT 1 = ");
+        println(portnames[0]);
+        print("RFID PORT 2 = ");
+        println(portnames[1]);
+        print("RFID PORT 3 = ");
+        println(portnames[2]);
+        print("NEOPIXEL PORT = ");
+        println(portnames[3]);
+        print("BAUD RATE = ");
+        println(baud_rate);
+        print("SERVER PORT = ");
+        println(server_port_num);
 }
 
 void draw() 
@@ -85,70 +113,86 @@ void draw()
         background(0);
 
         textSize(20);
-        text("Port name: " + portname, 20, 20);
-        text("baud rate: " + BR, 20, 50);
-        text("port: " + port, 20, 80);
+        text("rfid1 port name: " + portnames[0], 20, 20);
+        text("rfid2 port name: " + portnames[1], 20, 50);
+        text("rfid3 port name: " + portnames[2], 20, 80);
+        text("neopixel port name: " + portnames[3], 20, 110);
+        text("baud rate: " + baud_rate, 20, 140);
+        text("server port: " + server_port_num, 20, 170);
 
         // frame.setLocation(100, 100); //change to (-1000, -1000) to hide it
 
         String string_buffer = "";
 
-        while (serialPort.available () > 0) { //read from serial port
+        for (int i=0; i<NUM_PORTS; i++) {
 
-                string_buffer = serialPort.readStringUntil(10);
-                if (string_buffer != null) {
-                        in_string = trim(string_buffer);
-                        //smooth_data(); //averaging filter. Can comment out if not needed.
-                }
-        }
+                while (my_ports[i].available () > 0) { //read from serial port
 
-        myServer.write(str(averageSensorValue)); //echo to server port
-        myServer.write("\n");
-        //println(in_string);
-        text("From Arduino: " + averageSensorValue, 20, 200);
+                        string_buffer = my_ports[i].readStringUntil(10);
 
-        Client thisClient = myServer.available();  //read from client 
+                        if (string_buffer != null) {
 
-        String another_string_buffer = "";
+                                in_string = trim(string_buffer);
 
-        if (thisClient != null) {
-                if (thisClient.available() > 0) 
-                {           
-                        another_string_buffer = thisClient.readString();      
+                                //smooth_data(); //averaging filter. Outputs average_sensor_value. Can comment out if not needed.
 
-                        if (another_string_buffer != null) {
-                                int translated = translation_table(another_string_buffer.trim());
-                                println(translated);
-                                serialPort.write( 48 + translated );
-//                                serialPort.write(another_string_buffer); //echo to serial port
+                                my_server.write(in_string); //echo to server port
+                                my_server.write("\n");
                         }
                 }
         }
+
+        text("From Arduino: " + in_string, 20, 250); 
+
+        Client this_client = my_server.available();  //read from client 
+
+        String another_string_buffer = "";
+
+        if (this_client != null) {
+
+                if (this_client.available() > 0) 
+                {           
+                        another_string_buffer = this_client.readString();      
+
+                        if (another_string_buffer != null) {
+
+                                int translated = translation_table(another_string_buffer.trim());
+
+                                //println(translated);
+
+                                my_ports[3].write (48 + translated); //write to the neopixel Arduino Mega serial port
+
+                                //                                serialPort.write(another_string_buffer); //echo to serial port
+                        }
+                }
+        }
+
         text("From client: " + another_string_buffer, 20, 300);
 }
 
 
 void smooth_data() { //averaging filter
 
-        totalValue = totalValue- arrayReadings[my_index];
+        total_value = total_value- array_readings[my_index];
 
-        arrayReadings[my_index] = int(in_string);
+        array_readings[my_index] = int(in_string);
 
-        totalValue = totalValue + arrayReadings[my_index];
+        total_value = total_value + array_readings[my_index];
 
         my_index = my_index + 1;
 
         if (my_index >= NUM_OF_READINGS) {
+
                 my_index = 0;
-                averageSensorValue = totalValue / NUM_OF_READINGS;
+                average_sensor_value = total_value / NUM_OF_READINGS;
         }
 }
 
 int translation_table (String _string) {
 
         int translated = 0;
-        
-        println("string: " + _string);
+
+        //println("string: " + _string);
 
         if (_string.equals("off_all")) {
                 translated = 0;
@@ -171,7 +215,7 @@ int translation_table (String _string) {
         } else if (_string.equals("correct_3")) {
                 translated = 9;
         } 
-        
+
         return translated;
 }
 

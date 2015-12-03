@@ -1,0 +1,6 @@
+RFID_COMPORT1=/dev/cu.usbmodem141121
+RFID_COMPORT2=/dev/cu.usbmodem141131
+RFID_COMPORT3=/dev/cu.usbmodem141141
+NEOPIXEL_COMPORT=/dev/cu.usbmodem14121
+BR=9600
+SERVER PORT=5331
