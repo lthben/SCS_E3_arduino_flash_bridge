@@ -28,6 +28,10 @@
 import processing.net.*;
 import processing.serial.*;
 
+//USER DEFINED SETTINGS
+final int NUM_PORTS = 1; 
+final int NEOPIXEL_PORT_INDEX = 0; //which line index in the settings file is for the neopixel port
+
 //averaging the readings
 final int NUM_OF_READINGS = 5; //the higher the number, the smoother the transition, but more laggy
 int[] array_readings = new int[NUM_OF_READINGS];
@@ -37,7 +41,6 @@ int my_index;
 
 //network parameters
 //String rfid1_portname, rfid2_portname, rfid3_portname, neopixel_portname;
-final int NUM_PORTS = 4;
 Serial[] my_ports;
 String[] portnames;
 //Serial rfid1_port, rfid2_port, rfid3_port, neopixel_port;
@@ -46,7 +49,7 @@ int server_port_num;
 int baud_rate;
 
 //for incoming serial data
-String in_string;
+String in_string, client_string;
 int charvalue;
 String buf="";
 int cr = 13;  // ASCII return   == 13 //
@@ -57,166 +60,150 @@ byte nullByte = 0;
 
 void setup() {
 
-        size(600, 350);
+  size(600, 350);
 
-        printArray(Serial.list());
+  printArray(Serial.list());
 
-        String[] lines = loadStrings("settings.txt");
-        portnames = new String[4];
+  String[] lines = loadStrings("settings.txt");
+  String[] my_line;
+  
+  portnames = new String[NUM_PORTS];
 
-        for (int i=0; i<lines.length; i++) {
+  for (int i=0; i<NUM_PORTS; i++) {
+    my_line = split(lines[i], '=');
+    portnames[i] = my_line[1];
+  }
 
-                String[] a_line = split(lines[0], '=');
-                portnames[0] = a_line[1];
+  my_line = split(lines[lines.length-2], '=');
+  baud_rate = int(my_line[1]);
 
-                a_line = split(lines[1], '=');
-                portnames[1] = a_line[1];
+  my_line = split(lines[lines.length-1], '=');
+  server_port_num = int(my_line[1]);
 
-                a_line = split(lines[2], '=');
-                portnames[2] = a_line[1];
+  my_server = new Server(this, server_port_num);
 
+  my_ports = new Serial[NUM_PORTS];
 
-                a_line = split(lines[3], '=');
-                portnames[3] = a_line[1];
+  for (int i=0; i<NUM_PORTS; i++) {
+    my_ports[i] = new Serial(this, portnames[i], baud_rate);
+  }        
 
-                a_line = split(lines[4], '=');
-                baud_rate = int(a_line[1]);
-
-                a_line = split(lines[5], '=');
-                server_port_num = int(a_line[1]);
-        }    
-
-        my_server = new Server(this, server_port_num);
-
-        my_ports = new Serial[NUM_PORTS];
-
-        for (int i=0; i<NUM_PORTS; i++) {
-                my_ports[i] = new Serial(this, portnames[i], baud_rate);
-        }        
-
-        print("RFID PORT 1 = ");
-        println(portnames[0]);
-        print("RFID PORT 2 = ");
-        println(portnames[1]);
-        print("RFID PORT 3 = ");
-        println(portnames[2]);
-        print("NEOPIXEL PORT = ");
-        println(portnames[3]);
-        print("BAUD RATE = ");
-        println(baud_rate);
-        print("SERVER PORT = ");
-        println(server_port_num);
+  for (int i=0; i<NUM_PORTS; i++) {
+    print("PORT " + i + ": " + portnames[i]);
+  }
+  print("BAUD RATE = ");
+  println(baud_rate);
+  print("SERVER PORT = ");
+  println(server_port_num);
 }
 
 void draw() 
 {
-        background(0);
+  background(0);
 
-        textSize(20);
-        text("rfid1 port name: " + portnames[0], 20, 20);
-        text("rfid2 port name: " + portnames[1], 20, 50);
-        text("rfid3 port name: " + portnames[2], 20, 80);
-        text("neopixel port name: " + portnames[3], 20, 110);
-        text("baud rate: " + baud_rate, 20, 140);
-        text("server port: " + server_port_num, 20, 170);
+  textSize(20);
+  for (int i=0; i<NUM_PORTS; i++) {
+    text("port name " + i + ": " + portnames[i], 20, 20+i*30);
+  }
+  text("baud rate: " + baud_rate, 20, 140);
+  text("server port: " + server_port_num, 20, 170);
 
-        // frame.setLocation(100, 100); //change to (-1000, -1000) to hide it
+  // frame.setLocation(100, 100); //change to (-1000, -1000) to hide it
 
-        String string_buffer = "";
+  String string_buffer = "";
 
-        for (int i=0; i<NUM_PORTS; i++) {
+  for (int i=0; i<NUM_PORTS; i++) {
 
-                while (my_ports[i].available () > 0) { //read from serial port
+    while (my_ports[i].available () > 0) { //read from serial port
 
-                        string_buffer = my_ports[i].readStringUntil(10);
+      string_buffer = my_ports[i].readStringUntil(10);
 
-                        if (string_buffer != null) {
+      if (string_buffer != null) {
 
-                                in_string = trim(string_buffer);
+        in_string = trim(string_buffer);
 
-                                //smooth_data(); //averaging filter. Outputs average_sensor_value. Can comment out if not needed.
+        //smooth_data(); //averaging filter. Outputs average_sensor_value. Can comment out if not needed.
 
-                                my_server.write(in_string); //echo to server port
-                                my_server.write("\n");
-                        }
-                }
-        }
+        my_server.write(in_string); //echo to server port
+        my_server.write("\n");
+      }
+    }
+  }
 
-        text("From Arduino: " + in_string, 20, 250); 
+  if (NUM_PORTS > 1) text("From Arduino: " + in_string, 20, 250); 
 
-        Client this_client = my_server.available();  //read from client 
+  Client this_client = my_server.available();  //read from client 
 
-        String another_string_buffer = "";
+  if (this_client != null) {
 
-        if (this_client != null) {
+    if (this_client.available() > 0) 
+    {           
+      String a_string_buffer = this_client.readString();      
 
-                if (this_client.available() > 0) 
-                {           
-                        another_string_buffer = this_client.readString();      
+      if (a_string_buffer != null) {
 
-                        if (another_string_buffer != null) {
+        int translated = translation_table(a_string_buffer.trim());
+        client_string = a_string_buffer.trim();
 
-                                int translated = translation_table(another_string_buffer.trim());
+        //println(translated);
 
-                                //println(translated);
+        my_ports[NEOPIXEL_PORT_INDEX].write(48 + translated); //write to the neopixel Arduino Mega serial port
 
-                                my_ports[3].write (48 + translated); //write to the neopixel Arduino Mega serial port
+        //                                serialPort.write(another_string_buffer); //echo to serial port
+      }
+    }
+  }
 
-                                //                                serialPort.write(another_string_buffer); //echo to serial port
-                        }
-                }
-        }
-
-        text("From client: " + another_string_buffer, 20, 300);
+  text("From client: " + client_string, 20, 300);
 }
 
 
 void smooth_data() { //averaging filter
 
-        total_value = total_value- array_readings[my_index];
+  total_value = total_value- array_readings[my_index];
 
-        array_readings[my_index] = int(in_string);
+  array_readings[my_index] = int(in_string);
 
-        total_value = total_value + array_readings[my_index];
+  total_value = total_value + array_readings[my_index];
 
-        my_index = my_index + 1;
+  my_index = my_index + 1;
 
-        if (my_index >= NUM_OF_READINGS) {
+  if (my_index >= NUM_OF_READINGS) {
 
-                my_index = 0;
-                average_sensor_value = total_value / NUM_OF_READINGS;
-        }
+    my_index = 0;
+    average_sensor_value = total_value / NUM_OF_READINGS;
+  }
 }
 
 int translation_table (String _string) {
 
-        int translated = 0;
+  int translated = -1;
 
-        //println("string: " + _string);
+  //println("string: " + _string);
 
-        if (_string.equals("off_all")) {
-                translated = 0;
-        } else if (_string.equals("pulse_1")) {
-                translated = 1;
-        } else if (_string.equals("pulse_2")) {
-                translated = 2;
-        } else if (_string.equals("pulse_3")) {
-                translated = 3;
-        } else if (_string.equals("wrong_1")) {
-                translated = 4;
-        } else if (_string.equals("wrong_2")) {
-                translated = 5;
-        } else if (_string.equals("wrong_3")) {
-                translated = 6;
-        } else if (_string.equals("correct_1")) {
-                translated = 7;
-        } else if (_string.equals("correct_2")) {
-                translated = 8;
-        } else if (_string.equals("correct_3")) {
-                translated = 9;
-        } 
+  if (_string.equals("off_all")) {
+    translated = 0;
+  } else if (_string.equals("pulse_1")) {
+    translated = 1;
+  } else if (_string.equals("pulse_2")) {
+    translated = 2;
+  } else if (_string.equals("pulse_3")) {
+    translated = 3;
+  } else if (_string.equals("wrong_1")) {
+    translated = 4;
+  } else if (_string.equals("wrong_2")) {
+    translated = 5;
+  } else if (_string.equals("wrong_3")) {
+    translated = 6;
+  } else if (_string.equals("correct_1")) {
+    translated = 7;
+  } else if (_string.equals("correct_2")) {
+    translated = 8;
+  } else if (_string.equals("correct_3")) {
+    translated = 9;
+  } 
 
-        return translated;
+  return translated;
 }
 
 /* TEST PROGRAM TO CREATE CLIENT
